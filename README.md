@@ -87,36 +87,62 @@ README.md                  # Project overview and workflow instructions
 The tracking CSV files are consolidated into a single dataset using Python.
 
 #### Script: `scripts/process_data.py`
-```python
-import pandas as pd
 import os
+import re
+import pandas as pd
 
-# Folder path for raw tracking CSVs
-input_folder = "data/raw/"
-output_file = "data/data_for_violin.csv"
+# Define paths
+source_folder = '/content/drive/MyDrive/DF_DATA'
+final_csv_path = '/content/drive/MyDrive/DF_DATA/DF_DATA_FINAL/DF_DATA_FINAL.csv'
 
-# Consolidate all tracking data
-dataframes = []
-for file in os.listdir(input_folder):
-    if file.endswith(".csv"):
-        df = pd.read_csv(os.path.join(input_folder, file))
-        max_distance = df['MAX_DISTANCE_TRAVELED']
-        group = file.split("_")[0]  # Assumes file names include protein group
-        consolidated = pd.DataFrame({'Group': group, 'Value': max_distance})
-        dataframes.append(consolidated)
+# Clear the final CSV file and write header (Protein in column A, Value in column B)
+with open(final_csv_path, 'w') as f:
+    f.write("Protein,Value\n")
 
-# Combine all datasets
-final_df = pd.concat(dataframes, ignore_index=True)
-final_df = final_df[final_df['Value'] > 0]  # Remove invalid values
+# Process each file in the source folder
+for filename in os.listdir(source_folder):
+    file_path = os.path.join(source_folder, filename)
+    
+    # Skip directories (e.g., DF_DATA_FINAL)
+    if not os.path.isfile(file_path):
+        continue
 
-# Export to CSV
-final_df.to_csv(output_file, index=False)
-print("Data preparation complete. Output saved to:", output_file)
+    print(f"Processing file: {filename}")
+    
+    # Extract the protein name from the filename (everything before the first underscore)
+    protein_name = filename.split('_')[0]
+    
+    try:
+        # Read the CSV file (assuming headers are in the first row)
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        print(f"Error reading {filename}: {e}")
+        continue
 
-Purpose:
-	•	Combines individual CSV files into one clean dataset.
-	•	Extracts the Max Distance Traveled parameter.
-	•	Classifies yeast by protein group and removes immobile cells.
+    # Check if the target column "MAX_DISTANCE_TRAVELED" exists
+    if 'MAX_DISTANCE_TRAVELED' not in df.columns:
+        print(f"Column 'MAX_DISTANCE_TRAVELED' not found in {filename}. Skipping file.")
+        continue
+
+    # Extract numbers from each cell in the "MAX_DISTANCE_TRAVELED" column
+    numbers_extracted = []
+    for cell in df['MAX_DISTANCE_TRAVELED']:
+        if pd.isnull(cell):
+            continue
+        cell_str = str(cell)
+        # Use regex to extract numbers (including decimals)
+        matches = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+", cell_str)
+        numbers_extracted.extend(matches)
+    
+    # Append each number as a separate row in the final CSV:
+    # Column A is the protein name, Column B is one extracted value.
+    with open(final_csv_path, 'a') as f:
+        for number in numbers_extracted:
+            f.write(f"{protein_name},{number}\n")
+    
+    print(f"Finished processing file: {filename}")
+
+print("All files processed and final CSV updated.")
 
 2.3.3 RStudio: Statistical Analysis and Visualization
 
